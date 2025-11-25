@@ -34,12 +34,7 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, queu
 		return nil, amqp.Queue{}, err
 	}
 
-	var b bool
-	if queueType == Durable {
-		b = true
-	}
-
-	q, err := ch.QueueDeclare(queueName, b, !b, !b, false, nil)
+	q, err := ch.QueueDeclare(queueName, queueType != Transient, queueType == Transient, queueType == Transient, false, nil)
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
