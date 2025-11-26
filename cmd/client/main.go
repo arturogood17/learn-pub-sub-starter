@@ -42,4 +42,6 @@ func main() {
 		fmt.Println()
 		fmt.Println("Cerrando el programa")
 	}
+
+	gamelogic.PrintClientHelp()
 }
