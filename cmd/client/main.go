@@ -3,9 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -19,6 +16,9 @@ func main() {
 	if err != nil {
 		log.Fatal("Error al establecer la conexión")
 	}
+
+	defer conn.Close()
+
 	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal("Error al establecer la conexión")
@@ -31,17 +31,32 @@ func main() {
 		log.Fatal("Error al establecer la conexión")
 	}
 
-	defer conn.Close()
+	gameState := gamelogic.NewGameState(username)
 
-	sigs := make(chan os.Signal, 1)
-
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	_, ok := <-sigs
-	if ok {
-		fmt.Println()
-		fmt.Println("Cerrando el programa")
+	for {
+		userInput := gamelogic.GetInput()
+		if len(userInput) == 0 {
+			continue
+		}
+		switch userInput[0] {
+		case "spawn":
+			if err := gameState.CommandSpawn(userInput); err != nil {
+				log.Println(err)
+			}
+		case "move":
+			_, err := gameState.CommandMove(userInput)
+			if err != nil {
+				log.Println(err)
+			}
+		case "status":
+			gameState.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "quit":
+			gamelogic.PrintQuit()
+			return
+		default:
+			fmt.Println("Invalid command")
+		}
 	}
-
-	gamelogic.PrintClientHelp()
 }
