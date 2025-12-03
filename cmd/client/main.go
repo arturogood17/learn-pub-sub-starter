@@ -33,6 +33,11 @@ func main() {
 
 	gameState := gamelogic.NewGameState(username)
 
+	if err := pubsub.SubscribeJSON(conn, string(routing.ExchangePerilDirect),
+		queueName, string(routing.PauseKey), pubsub.Transient, HandlerCreator(gameState)); err != nil {
+		log.Fatalln(err)
+	}
+
 	for {
 		userInput := gamelogic.GetInput()
 		if len(userInput) == 0 {
