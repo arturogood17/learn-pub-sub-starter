@@ -46,3 +46,30 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, queu
 	return ch, q, nil
 
 }
+
+func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string, queueType SimpleQueueType, handler func(T)) error {
+	ch, _, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	if err != nil {
+		return err
+	}
+	c, err := ch.Consume(queueName, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	go func() error {
+		for delivery := range c {
+			var data T
+			if err := json.Unmarshal(delivery.Body, &data); err != nil {
+				return err
+			}
+			handler(data)
+			if err := delivery.Ack(false); err != nil {
+				return err
+			}
+		}
+		return nil
+	}()
+
+	return nil
+}
