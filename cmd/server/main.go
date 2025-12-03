@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Error al establecer la conexión")
 	}
-	ch, err := conn.Channel()
+	ch, _, err := pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, "game_logs.*", pubsub.Durable)
 	if err != nil {
 		log.Fatal("Error al crear el canal")
 	}
