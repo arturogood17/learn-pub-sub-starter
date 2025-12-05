@@ -19,6 +19,11 @@ func main() {
 
 	defer conn.Close()
 
+	pbChannel, err := conn.Channel()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal("Error al establecer la conexión")
@@ -26,15 +31,19 @@ func main() {
 
 	queueName := fmt.Sprintf("%v.%v", routing.PauseKey, username)
 
-	_, _, err = pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, pubsub.Transient)
-	if err != nil {
-		log.Fatal("Error al establecer la conexión")
-	}
-
 	gameState := gamelogic.NewGameState(username)
 
 	if err := pubsub.SubscribeJSON(conn, string(routing.ExchangePerilDirect),
-		queueName, string(routing.PauseKey), pubsub.Transient, HandlerCreator(gameState)); err != nil {
+		queueName, string(routing.PauseKey), pubsub.Transient, HandlerPause(gameState)); err != nil {
+		log.Fatalln(err)
+	}
+
+	queueTopic := fmt.Sprintf("%s.%v", routing.ArmyMovesPrefix, username)
+	keyTopic := fmt.Sprintf("%s.*", routing.ArmyMovesPrefix)
+
+	if err := pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic),
+		queueTopic, keyTopic, pubsub.Transient,
+		HandlerMove(gameState)); err != nil {
 		log.Fatalln(err)
 	}
 
@@ -49,10 +58,14 @@ func main() {
 				log.Println(err)
 			}
 		case "move":
-			_, err := gameState.CommandMove(userInput)
+			armyMove, err := gameState.CommandMove(userInput)
 			if err != nil {
 				log.Println(err)
 			}
+			if err := pubsub.PublishJSON(pbChannel, string(routing.ExchangePerilTopic), queueTopic, armyMove); err != nil {
+				log.Println(err)
+			}
+			log.Println(armyMove)
 		case "status":
 			gameState.CommandStatus()
 		case "help":
