@@ -3,15 +3,23 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type SimpleQueueType int
+type AckType int
 
 const (
 	Transient SimpleQueueType = iota
 	Durable
+)
+
+const (
+	Ack AckType = iota
+	NackRequeue
+	NackDiscard
 )
 
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
@@ -34,7 +42,8 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, queu
 		return nil, amqp.Queue{}, err
 	}
 
-	q, err := ch.QueueDeclare(queueName, queueType != Transient, queueType == Transient, queueType == Transient, false, nil)
+	q, err := ch.QueueDeclare(queueName, queueType != Transient,
+		queueType == Transient, queueType == Transient, false, amqp.Table{"x-dead-letter-exchange": "peril_dlx"})
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
@@ -47,7 +56,7 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, queu
 
 }
 
-func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string, queueType SimpleQueueType, handler func(T)) error {
+func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string, queueType SimpleQueueType, handler func(T) AckType) error {
 	ch, _, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
 		return err
@@ -63,9 +72,23 @@ func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string
 			if err := json.Unmarshal(delivery.Body, &data); err != nil {
 				return err
 			}
-			handler(data)
-			if err := delivery.Ack(false); err != nil {
-				return err
+			ack := handler(data)
+			switch ack {
+			case Ack:
+				if err := delivery.Ack(false); err != nil {
+					return err
+				}
+				log.Println("Action: ack")
+			case NackRequeue:
+				if err := delivery.Nack(false, true); err != nil {
+					return err
+				}
+				log.Println("Action: NackRequeue")
+			case NackDiscard:
+				if err := delivery.Nack(false, false); err != nil {
+					return err
+				}
+				log.Println("Action: NackDiscard")
 			}
 		}
 		return nil
